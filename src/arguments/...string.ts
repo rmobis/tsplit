@@ -1,12 +1,10 @@
-import { botCache } from "../../deps.ts";
+import { botCache } from '../../deps.ts';
 
-botCache.arguments.set("...string", {
-  name: "...string",
-  execute: function (argument, parameters) {
-    if (!parameters.length) return;
+botCache.arguments.set('...string', {
+	name: '...string',
+	execute: function (argument, parameters) {
+		if (!parameters.length) return;
 
-    return argument.lowercase
-      ? parameters.join(" ").toLowerCase()
-      : parameters.join(" ");
-  },
+		return argument.lowercase ? parameters.join(' ').toLowerCase() : parameters.join(' ');
+	},
 });
