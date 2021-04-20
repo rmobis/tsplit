@@ -9,9 +9,6 @@ interface PlayerStats {
 	isLeader: boolean;
 	loot: number;
 	supplies: number;
-	balance: number;
-	damage: number;
-	healing: number;
 	restitution: number;
 }
 
@@ -33,6 +30,49 @@ function buildField(trans: Map<string, number>): string {
 	return transferMsgs.join('\n');
 }
 
+function parseSessionData(message: string): Record<string, any>[] {
+	let players: Record<string, any>[] = [];
+	let matches = message.matchAll(PARTY_HUNT_REGEX);
+
+	for (const m of matches) {
+		players.push({
+			name: m.groups?.name || '',
+			isLeader: !!m.groups?.leader,
+			loot: parseNumber(m.groups?.loot),
+			supplies: parseNumber(m.groups?.sup),
+			restitution: 0,
+		});
+	}
+
+	return players;
+}
+
+function roundToNearestMultiple(n: number, mul: number) {
+	return Math.round(n / mul) * mul;
+}
+
+function preprocessData(data: Record<string, any>[]): Record<string, any>[] {
+	data = data
+		.map((v) => ({
+			...v,
+			loot: roundToNearestMultiple(v.loot, data.length),
+			supplies: roundToNearestMultiple(v.supplies, data.length),
+		}))
+		.map((v) => ({
+			...v,
+			balance: v.loot - v.supplies,
+		}));
+
+	const splitBalance = data.reduce((memo, v) => memo + v.balance, 0) / data.length;
+
+	return data
+		.map((v) => ({
+			...v,
+			restitution: splitBalance - v.balance,
+		}))
+		.sort((a, b) => a.restitution - b.restitution);
+}
+
 botCache.monitors.set('balanceCalculator', {
 	name: 'balanceCalculator',
 	ignoreDM: false,
@@ -41,34 +81,12 @@ botCache.monitors.set('balanceCalculator', {
 		// If the message was sent by a bot we can just ignore it
 		if (message.author.bot) return;
 
-		let matches = message.content.matchAll(PARTY_HUNT_REGEX);
-		let players: PlayerStats[] = [];
-		for (const m of matches) {
-			players.push({
-				name: m.groups?.name || '',
-				isLeader: !!m.groups?.leader,
-				loot: parseNumber(m.groups?.loot),
-				supplies: parseNumber(m.groups?.sup),
-				balance: parseNumber(m.groups?.blnc),
-				damage: parseNumber(m.groups?.dmg),
-				healing: parseNumber(m.groups?.heal),
-				restitution: 0,
-			});
-		}
-
+		let players = parseSessionData(message.content);
 		if (players.length === 0) {
 			return;
 		}
 
-		const partyBalance = players.reduce((memo, v) => v.balance + memo, 0);
-		const sortedPlayers = players
-			.map((v) => {
-				return {
-					...v,
-					restitution: Math.trunc(partyBalance / players.length - v.balance),
-				};
-			})
-			.sort((a, b) => a.restitution - b.restitution);
+		const sortedPlayers = preprocessData(players);
 
 		const embed = new Embed().setTitle('Party Hunt Results #00').setColor('#198754');
 
