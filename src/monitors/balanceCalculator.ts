@@ -97,7 +97,7 @@ botCache.monitors.set('balanceCalculator', {
 
 			let transactions = new Map<string, number>();
 
-			for (const rplayer of sortedPlayers.reverse()) {
+			for (const rplayer of [...sortedPlayers].reverse()) {
 				if (rplayer.restitution <= 0) {
 					continue;
 				}
