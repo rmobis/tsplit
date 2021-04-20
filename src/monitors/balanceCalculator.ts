@@ -20,10 +20,10 @@ function parseNumber(str: string | undefined): number {
 	return parseInt(str.replaceAll(',', ''), 10);
 }
 
-function buildField(trans: Map<string, number>): string {
+function buildField(transfers: Record<string, number>): string {
 	let transferMsgs = [];
 
-	for (const [key, value] of trans.entries()) {
+	for (const [key, value] of Object.entries(transfers)) {
 		transferMsgs.push(`transfer ${value} to ${key}`);
 	}
 
@@ -73,6 +73,44 @@ function preprocessData(data: Record<string, any>[]): Record<string, any>[] {
 		.sort((a, b) => a.restitution - b.restitution);
 }
 
+function buildTransfers(data: Record<string, any>[]) {
+	for (const player of data) {
+		if (player.restitution >= 0) continue;
+
+		player.transfers = {};
+
+		for (const rplayer of [...data].reverse()) {
+			if (rplayer.restitution <= 0) {
+				continue;
+			}
+
+			const transAmount = Math.min(-player.restitution, rplayer.restitution);
+			player.restitution += transAmount;
+			rplayer.restitution -= transAmount;
+
+			player.transfers[rplayer.name] = transAmount;
+
+			if (player.restitution === 0) {
+				break;
+			}
+		}
+	}
+}
+
+function buildEmbed(data: Record<string, any>[]): Embed {
+	const embed = new Embed().setTitle('Party Hunt Results #00').setColor('#198754');
+
+	for (const player of data) {
+		if (!player.transfers) {
+			continue;
+		}
+
+		embed.addField((player.isLeader ? '👑 ' : '') + player.name, buildField(player.transfers));
+	}
+
+	return embed;
+}
+
 botCache.monitors.set('balanceCalculator', {
 	name: 'balanceCalculator',
 	ignoreDM: false,
@@ -86,36 +124,9 @@ botCache.monitors.set('balanceCalculator', {
 			return;
 		}
 
-		const sortedPlayers = preprocessData(players);
-
-		const embed = new Embed().setTitle('Party Hunt Results #00').setColor('#198754');
-
-		console.log(sortedPlayers);
-
-		for (const player of sortedPlayers) {
-			if (player.restitution >= 0) continue;
-
-			let transactions = new Map<string, number>();
-
-			for (const rplayer of [...sortedPlayers].reverse()) {
-				if (rplayer.restitution <= 0) {
-					continue;
-				}
-
-				const transAmount = Math.min(-player.restitution, rplayer.restitution);
-				player.restitution += transAmount;
-				rplayer.restitution -= transAmount;
-
-				transactions.set(rplayer.name, transAmount);
-
-				if (player.restitution === 0) {
-					break;
-				}
-			}
-
-			embed.addField((player.isLeader ? '👑 ' : '') + player.name, buildField(transactions));
-		}
-
+		let data = preprocessData(players);
+		buildTransfers(data);
+		const embed = buildEmbed(data);
 		sendEmbed(message.channelID, embed);
 	},
 });
