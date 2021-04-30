@@ -52,45 +52,58 @@ function roundToNearestMultiple(n: number, mul: number) {
 }
 
 function preprocessData(data: Record<string, any>[]): Record<string, any>[] {
+	const numOfPlayers = data.length;
+
 	data = data
 		.map((v) => ({
 			...v,
-			loot: roundToNearestMultiple(v.loot, data.length),
-			supplies: roundToNearestMultiple(v.supplies, data.length),
+			pLoot: v.loot * numOfPlayers,
+			pSupplies: v.supplies * numOfPlayers,
 		}))
 		.map((v) => ({
 			...v,
-			balance: v.loot - v.supplies,
+			pBalance: v.pLoot - v.pSupplies,
 		}));
 
-	const splitBalance = data.reduce((memo, v) => memo + v.balance, 0) / data.length;
+	const splitBalance = data.reduce((memo, v) => memo + v.pBalance, 0) / numOfPlayers;
 
+	let carryDiff = 0;
 	return data
 		.map((v) => ({
 			...v,
-			restitution: splitBalance - v.balance,
+			pRestitution: splitBalance - v.pBalance,
 		}))
-		.sort((a, b) => a.restitution - b.restitution);
+		.map((v) => {
+			const localDiff = v.pRestitution - roundToNearestMultiple(v.pRestitution, numOfPlayers);
+			const localFix = roundToNearestMultiple(carryDiff + localDiff, numOfPlayers);
+			carryDiff -= localFix;
+
+			return {
+				...v,
+				ppRestitution: (v.pRestitution - localDiff + localFix) / numOfPlayers,
+			};
+		})
+		.sort((a, b) => a.ppRestitution - b.ppRestitution);
 }
 
 function buildTransfers(data: Record<string, any>[]) {
 	for (const player of data) {
-		if (player.restitution >= 0) continue;
+		if (player.ppRestitution >= 0) continue;
 
 		player.transfers = {};
 
 		for (const rplayer of [...data].reverse()) {
-			if (rplayer.restitution <= 0) {
+			if (rplayer.ppRestitution <= 0) {
 				continue;
 			}
 
-			const transAmount = Math.min(-player.restitution, rplayer.restitution);
-			player.restitution += transAmount;
-			rplayer.restitution -= transAmount;
+			const transAmount = Math.min(-player.ppRestitution, rplayer.ppRestitution);
+			player.ppRestitution += transAmount;
+			rplayer.ppRestitution -= transAmount;
 
 			player.transfers[rplayer.name] = transAmount;
 
-			if (player.restitution === 0) {
+			if (player.ppRestitution === 0) {
 				break;
 			}
 		}
